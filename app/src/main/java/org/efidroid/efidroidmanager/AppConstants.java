@@ -5,7 +5,7 @@ import android.os.Build;
 import org.efidroid.efidroidmanager.models.DeviceInfo;
 
 public final class AppConstants {
-    private static final String URL_OTA = "http://sub77.github.io/files/android/falcon/efidroid";
+    private static final String URL_OTA = "https://raw.githubusercontent.com/efidroid/ota/master";
     public static final String URL_DEVICES = URL_OTA+"/devices.json";
 
     public static final String DEVICE_NAME = Build.MANUFACTURER+"/"+Build.DEVICE;
