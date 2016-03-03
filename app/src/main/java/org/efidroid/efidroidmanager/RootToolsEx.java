@@ -1,6 +1,7 @@
 package org.efidroid.efidroidmanager;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.util.Log;
 
 import com.stericson.rootshell.RootShell;
@@ -18,6 +19,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.commons.io.FilenameUtils;
@@ -280,7 +282,7 @@ public final class RootToolsEx {
     public static boolean isFile(String path) throws Exception {
         final Pointer<Boolean> exists = new Pointer<>(false);
 
-        Command command = new Command(0, false, "busybox find \"\"+path+\"\" -mindepth 0 -maxdepth 0 -type f")
+        Command command = new Command(0, false, "busybox find \""+path+"\" -mindepth 0 -maxdepth 0 -type f")
         {
             @Override
             public void commandOutput(int id, String line) {
@@ -299,7 +301,7 @@ public final class RootToolsEx {
     public static boolean nodeExists(String path) throws Exception {
         final Pointer<Boolean> exists = new Pointer<>(false);
 
-        Command command = new Command(0, false, "busybox find \"\"+path+\"\" -mindepth 0 -maxdepth 0")
+        Command command = new Command(0, false, "busybox find \""+path+"\" -mindepth 0 -maxdepth 0")
         {
             @Override
             public void commandOutput(int id, String line) {
@@ -388,6 +390,33 @@ public final class RootToolsEx {
         return stringWriter.getBuffer().toString();
     }
 
+    public static void copyFileNoRoot(String source, String destination) throws Exception {
+        final Command command = new Command(0, false, "su -c 'busybox cat \""+source+"\"' > \""+destination+"\"");
+
+        Shell shell = RootTools.getShell(false);
+        shell.add(command);
+        commandWait(shell, command);
+        ReturnCodeException.check(command.getExitCode());
+    }
+
+    public static File copyFileToTemp(Context context, String path) throws Exception {
+        String cacheDir = context.getCacheDir().getAbsolutePath();
+        File cacheFile = new File(cacheDir+"/"+ UUID.randomUUID().toString() + ".tmp");
+
+        copyFileNoRoot(path, cacheFile.getAbsolutePath());
+
+        return cacheFile;
+    }
+
+    public static int chmod(String file, String perm) throws Exception {
+        final Command command = new Command(0, false, "busybox chmod \""+perm+"\" \""+file+"\"");
+        Shell shell = RootTools.getShell(true);
+        shell.add(command);
+        commandWait(shell, command);
+
+        return command.getExitCode();
+    }
+
     public static int kill(int pid) throws Exception {
         final Command command = new Command(0, false, "busybox kill -SIGKILL "+pid);
         Shell shell = RootTools.getShell(true);
@@ -424,7 +453,7 @@ public final class RootToolsEx {
     }
 
     public static void createLoopImage(IntentServiceEx service, String filename, long size) throws Exception {
-        final Command command = new Command(0, false, 0, "busybox dd if=/dev/zero of=\""+filename+"\" bs="+size+" count=1");
+        final Command command = new Command(0, false, 0, "busybox dd if=/dev/zero of=\""+filename+"\" bs=512 count="+(Util.ROUNDUP(size,512)/512)+"");
         int rc = runServiceCommand(service, command);
         ReturnCodeException.check(rc);
     }
@@ -553,6 +582,20 @@ public final class RootToolsEx {
         FileOutputStream os = new FileOutputStream(cacheFile);
         os.write(data.getBytes());
         os.close();
+
+        // copy cache file to destination
+        copyFile(cacheFile.getAbsolutePath(), filename);
+
+        // delete cache file
+        cacheFile.delete();
+    }
+
+    public static void writeBitmapToPngFile(Context context, String filename, Bitmap bitmap) throws Exception {
+        String cacheDir = context.getCacheDir().getAbsolutePath();
+        File cacheFile = new File(cacheDir+"/"+ FilenameUtils.getName(filename));
+
+        // write data to cache file
+        Util.savePng(cacheFile, bitmap);
 
         // copy cache file to destination
         copyFile(cacheFile.getAbsolutePath(), filename);
