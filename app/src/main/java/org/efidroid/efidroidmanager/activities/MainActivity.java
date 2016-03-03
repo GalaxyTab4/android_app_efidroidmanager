@@ -1,37 +1,29 @@
 package org.efidroid.efidroidmanager.activities;
 
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import com.melnykov.fab.FloatingActionButton;
-import android.support.design.widget.Snackbar;
+import android.support.annotation.NonNull;
+import android.support.design.widget.NavigationView;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
-import android.support.v4.widget.SwipeRefreshLayout;
-import android.view.MotionEvent;
-import android.view.View;
-import android.support.design.widget.NavigationView;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
+import android.support.v4.widget.SwipeRefreshLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
+import android.view.View;
 import android.widget.ProgressBar;
-import android.widget.Toast;
+
 import com.afollestad.materialdialogs.DialogAction;
 import com.afollestad.materialdialogs.MaterialDialog;
-import com.stericson.RootTools.RootTools;
-
-import org.ini4j.Ini;
-
-import java.io.StringReader;
-import java.util.ArrayList;
-import java.util.List;
+import com.melnykov.fab.FloatingActionButton;
+import com.stericson.rootshell.RootShell;
+import com.stericson.roottools.RootTools;
 
 import org.efidroid.efidroidmanager.DataHelper;
 import org.efidroid.efidroidmanager.R;
@@ -40,8 +32,11 @@ import org.efidroid.efidroidmanager.fragments.EmptyFragment;
 import org.efidroid.efidroidmanager.fragments.OperatingSystemFragment;
 import org.efidroid.efidroidmanager.models.DeviceInfo;
 import org.efidroid.efidroidmanager.models.MountInfo;
-import org.efidroid.efidroidmanager.types.MountEntry;
 import org.efidroid.efidroidmanager.models.OperatingSystem;
+import org.efidroid.efidroidmanager.types.MountEntry;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener,
@@ -60,107 +55,76 @@ public class MainActivity extends AppCompatActivity
     private AsyncTask<?, ?, ?> mFragmentLoadingTask = null;
     private ArrayList<OperatingSystem> mOperatingSystems;
     private boolean mTouchDisabled = false;
-    private DataFragment dataFragment;
     private int mActiveMenuItemIndex = 0;
+    private MenuItem mPreviousMenuItem;
 
-    public static class DataFragment extends Fragment {
-        public DeviceInfo device_info = null;
-        public ArrayList<OperatingSystem> operating_systems = null;
-        public int active_menu_item_index = 0;
-        public boolean has_busybox = false;
-        public boolean has_root = false;
-
-        @Override
-        public void onCreate(Bundle savedInstanceState) {
-            super.onCreate(savedInstanceState);
-            setRetainInstance(true);
-        }
-    }
-
-    private BroadcastReceiver receiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            Bundle bundle = intent.getExtras();
-            if (bundle != null) {
-                String string = bundle.getString("FILEPATH");
-                Toast.makeText(MainActivity.this, string,
-                        Toast.LENGTH_LONG).show();
-            }
-
-            removeStickyBroadcast(intent);
-        }
-    };
+    private static final String ARG_DEVICE_INFO = "deviceinfo";
+    private static final String ARG_OPERATING_SYSTEMS = "operating_systems";
+    private static final String ARG_ACTIVEMENU_INDEX = "activemenu_index";
+    private static final String ARG_HAS_BUSYBOX = "has_busybox";
+    private static final String ARG_HAS_ROOT = "has_root";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // get views
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        mFragmentProgress = (ProgressBar)findViewById(R.id.progressBar);
+        mDrawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        mNavigationView = (NavigationView) findViewById(R.id.nav_view);
+        mFab = (FloatingActionButton) findViewById(R.id.fab);
+        mSwipeRefreshLayout = (SwipeRefreshLayout) findViewById(R.id.swipe_refresh_layout);
+
+        // actionbar
         setSupportActionBar(toolbar);
 
-        mFab = (FloatingActionButton) findViewById(R.id.fab);
+        // drawer
+        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
+                this, mDrawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
+        mDrawer.setDrawerListener(toggle);
+        toggle.syncState();
+
+        // FAB
         mFab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
+                Intent intent = new Intent(MainActivity.this, OperatingSystemEditActivity.class);
+                intent.putExtra(OperatingSystemEditActivity.ARG_OPERATING_SYSTEM, new OperatingSystem());
+                intent.putExtra(OperatingSystemEditActivity.ARG_DEVICE_INFO, mDeviceInfo);
+                startActivity(intent);
             }
         });
 
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-        ActionBarDrawerToggle toggle = new ActionBarDrawerToggle(
-                this, drawer, toolbar, R.string.navigation_drawer_open, R.string.navigation_drawer_close);
-        drawer.setDrawerListener(toggle);
-        toggle.syncState();
-
-        mNavigationView = (NavigationView) findViewById(R.id.nav_view);
+        // navigation view
         mNavigationView.setNavigationItemSelectedListener(this);
 
-        mFragmentProgress = (ProgressBar)findViewById(R.id.progressBar);
-        mDrawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-
-        mSwipeRefreshLayout = (SwipeRefreshLayout) findViewById(R.id.swipe_refresh_layout);
+        // SRL
         mSwipeRefreshLayout.setEnabled(false);
 
-        // get data fragment
-        FragmentManager fm = getSupportFragmentManager();
-        dataFragment = (DataFragment) fm.findFragmentByTag("data");
-
-        // create the fragment and data the first time
-        if (dataFragment == null) {
-            // load device info
+        // load data the first time
+        if (savedInstanceState == null) {
+            // show progress dialog
             mProgressDialog = new MaterialDialog.Builder(this)
                     .title("Loading device info")
                     .content("Please wait")
+                    .cancelable(false)
                     .progress(true, 0)
                     .show();
 
-            dataFragment = new DataFragment();
-            fm.beginTransaction().add(dataFragment, "data").commit();
-
+            // load device info
             DataHelper.loadDeviceInfo(this, this);
         }
 
         else {
-            getDataFragmentData();
+            mDeviceInfo = savedInstanceState.getParcelable(ARG_DEVICE_INFO);
+            mOperatingSystems = savedInstanceState.getParcelableArrayList(ARG_OPERATING_SYSTEMS);
+            mActiveMenuItemIndex = savedInstanceState.getInt(ARG_ACTIVEMENU_INDEX);
+            hasBusybox = savedInstanceState.getBoolean(ARG_HAS_BUSYBOX);
+            hasRoot = savedInstanceState.getBoolean(ARG_HAS_ROOT);
             onLoadUiData();
         }
-    }
-
-    private void getDataFragmentData() {
-        mDeviceInfo = dataFragment.device_info;
-        mOperatingSystems = dataFragment.operating_systems;
-        mActiveMenuItemIndex = dataFragment.active_menu_item_index;
-        hasBusybox = dataFragment.has_busybox;
-        hasRoot = dataFragment.has_root;
-    }
-
-    private void setDataFragmentData() {
-        dataFragment.device_info = mDeviceInfo;
-        dataFragment.operating_systems = mOperatingSystems;
-        dataFragment.active_menu_item_index = mActiveMenuItemIndex;
-        dataFragment.has_busybox = hasBusybox;
-        dataFragment.has_root = hasRoot;
     }
 
     public void onDeviceInfoLoadError(Exception e) {
@@ -170,7 +134,7 @@ public class MainActivity extends AppCompatActivity
                 .positiveText("Try again")
                 .cancelable(false).onPositive(new MaterialDialog.SingleButtonCallback() {
             @Override
-            public void onClick(MaterialDialog dialog, DialogAction which) {
+            public void onClick(@NonNull MaterialDialog dialog, @NonNull DialogAction which) {
                 DataHelper.loadDeviceInfo(MainActivity.this, MainActivity.this);
             }
         }).show();
@@ -182,12 +146,19 @@ public class MainActivity extends AppCompatActivity
                     .title("Title")
                     .content("You need BusyBox to use this app.")
                     .positiveText("Install")
+                    .neutralText("Try again")
                     .cancelable(false).onPositive(new MaterialDialog.SingleButtonCallback() {
-                @Override
-                public void onClick(MaterialDialog dialog, DialogAction which) {
-                    RootTools.offerBusyBox(MainActivity.this);
-                }
-            }).show();
+                        @Override
+                        public void onClick(@NonNull MaterialDialog dialog, @NonNull DialogAction which) {
+                            RootTools.offerBusyBox(MainActivity.this);
+                        }
+                    })
+                    .onNeutral(new MaterialDialog.SingleButtonCallback() {
+                        @Override
+                        public void onClick(@NonNull MaterialDialog dialog, @NonNull DialogAction which) {
+                            onLoadUiData();
+                        }
+                    }).show();
             return;
         }
         hasBusybox = true;
@@ -199,7 +170,7 @@ public class MainActivity extends AppCompatActivity
                     .positiveText("Try again")
                     .cancelable(false).onPositive(new MaterialDialog.SingleButtonCallback() {
                         @Override
-                        public void onClick(MaterialDialog dialog, DialogAction which) {
+                        public void onClick(@NonNull MaterialDialog dialog, @NonNull DialogAction which) {
                             onLoadUiData();
                         }
                     }).show();
@@ -220,7 +191,6 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onResume() {
         super.onResume();
-        registerReceiver(receiver, new IntentFilter("NOTIFICATION"));
 
         // we got paused by offering the busybox, so resume loading now
         if(!hasBusybox) {
@@ -231,7 +201,6 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onPause() {
         super.onPause();
-        unregisterReceiver(receiver);
 
         // cancel current task and disable loading animations
         if(mFragmentLoadingTask!=null && !mFragmentLoadingTask.isCancelled()) {
@@ -243,9 +212,14 @@ public class MainActivity extends AppCompatActivity
     }
 
     @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        setDataFragmentData();
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putParcelable(ARG_DEVICE_INFO, mDeviceInfo);
+        outState.putParcelableArrayList(ARG_OPERATING_SYSTEMS, mOperatingSystems);
+        outState.putInt(ARG_ACTIVEMENU_INDEX, mActiveMenuItemIndex);
+        outState.putBoolean(ARG_HAS_BUSYBOX, hasBusybox);
+        outState.putBoolean(ARG_HAS_ROOT, hasRoot);
+
+        super.onSaveInstanceState(outState);
     }
 
     @Override
@@ -293,38 +267,42 @@ public class MainActivity extends AppCompatActivity
 
                     // load block devices
                     List<String> blockDevices = RootToolsEx.getBlockDevices();
-                    if (isCancelled()) return null;
 
                     for (String blkDevice : blockDevices) {
                         if (isCancelled()) return null;
 
-                        // get mountpoint
-                        int[] majmin = RootToolsEx.getDeviceNode(blkDevice);
-                        MountEntry mountEntry = mountInfo.getByMajorMinor(majmin[0], majmin[1]);
-                        if (mountEntry == null)
+                        try {
+                            // get mountpoint
+                            int[] majmin = RootToolsEx.getDeviceNode(blkDevice);
+                            MountEntry mountEntry = mountInfo.getByMajorMinor(majmin[0], majmin[1]);
+                            if (mountEntry == null)
+                                continue;
+                            String mountPoint = mountEntry.getMountPoint();
+
+                            // find multiboot directories
+                            for(String multibootPath : OperatingSystem.MULTIBOOT_PATHS) {
+                                String multibootDir = mountPoint + multibootPath;
+
+                                if (!RootToolsEx.isDirectory(multibootDir))
+                                    continue;
+
+                                // get multiboot.ini's
+                                List<String> directories = RootToolsEx.getMultibootSystems(multibootDir);
+                                for (String directory : directories) {
+                                    String path = directory + "/multiboot.ini";
+
+                                    try {
+                                        list.add(new OperatingSystem(path));
+                                    } catch (Exception e){}
+                                }
+                            }
+                        }
+                        catch (Exception e) {
                             continue;
-                        String mountPoint = mountEntry.getMountPoint();
-                        String multibootDir = null;
-
-                        // find multiboot directory
-                        if (RootToolsEx.fileExists(mountPoint + "/media/0/multiboot"))
-                            multibootDir = mountPoint + "/media/0/multiboot";
-                        else if (RootToolsEx.fileExists(mountPoint + "/media/multiboot"))
-                            multibootDir = mountPoint + "/media/multiboot";
-                        else if (RootToolsEx.fileExists(mountPoint + "/multiboot"))
-                            multibootDir = mountPoint + "/multiboot";
-                        else
-                            continue;
-
-                        // get multiboot.ini's
-                        List<String> directories = RootToolsEx.getMultibootSystems(multibootDir);
-                        for (String directory : directories) {
-                            String path = directory + "/multiboot.ini";
-                            list.add(new OperatingSystem(path));
-
                         }
                     }
                 } catch (Exception e) {
+                    e.printStackTrace();
                     return e;
                 }
                 return null;
@@ -338,7 +316,7 @@ public class MainActivity extends AppCompatActivity
                 if (e != null) {
                     new MaterialDialog.Builder(MainActivity.this)
                             .title("Title")
-                            .content("Can't operating systems." + e.getLocalizedMessage())
+                            .content("Can't load operating systems. " + e.getLocalizedMessage())
                             .positiveText("ok").show();
                     return;
                 }
@@ -356,7 +334,7 @@ public class MainActivity extends AppCompatActivity
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        return mTouchDisabled?true:super.dispatchTouchEvent(ev);
+        return mTouchDisabled || super.dispatchTouchEvent(ev);
     }
 
     @SuppressWarnings("StatementWithEmptyBody")
@@ -438,25 +416,12 @@ public class MainActivity extends AppCompatActivity
         FragmentManager fragmentManager = getSupportFragmentManager();
         fragmentManager.beginTransaction().replace(R.id.flContent, fragment).commit();
 
-        // uncheck other groups
-        if(item.getGroupId()==R.id.nav_group_main){
-            mNavigationView.getMenu().setGroupCheckable(R.id.nav_group_main,true,true);
-            mNavigationView.getMenu().setGroupCheckable(R.id.nav_group_setup,false,true);
-            mNavigationView.getMenu().setGroupCheckable(R.id.nav_group_communicate,false,true);
-        }
-        else if(item.getGroupId()==R.id.nav_group_setup){
-            mNavigationView.getMenu().setGroupCheckable(R.id.nav_group_main,false,true);
-            mNavigationView.getMenu().setGroupCheckable(R.id.nav_group_setup,true,true);
-            mNavigationView.getMenu().setGroupCheckable(R.id.nav_group_communicate,false,true);
-        }
-        else if(item.getGroupId()==R.id.nav_group_communicate){
-            mNavigationView.getMenu().setGroupCheckable(R.id.nav_group_main,false,true);
-            mNavigationView.getMenu().setGroupCheckable(R.id.nav_group_setup,false,true);
-            mNavigationView.getMenu().setGroupCheckable(R.id.nav_group_communicate,true,true);
-        }
-
         // Highlight the selected item and update the title
         item.setChecked(true);
+        if (mPreviousMenuItem != null) {
+            mPreviousMenuItem.setChecked(false);
+        }
+        mPreviousMenuItem = item;
         setTitle(item.getTitle());
 
         // close drawer
@@ -468,6 +433,7 @@ public class MainActivity extends AppCompatActivity
     public void onListFragmentInteraction(OperatingSystem item) {
         Intent intent = new Intent(this, OperatingSystemEditActivity.class);
         intent.putExtra(OperatingSystemEditActivity.ARG_OPERATING_SYSTEM, item);
+        intent.putExtra(OperatingSystemEditActivity.ARG_DEVICE_INFO, mDeviceInfo);
         startActivity(intent);
     }
 

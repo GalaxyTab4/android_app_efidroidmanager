@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <group android:checkableBehavior="single" android:id="@+id/nav_group_main">
+    <group android:id="@+id/nav_group_main">
         <item
             android:id="@+id/nav_operating_systems"
             android:icon="@drawable/ic_menu_memory"
@@ -18,16 +18,20 @@
             android:id="@+id/nav_plugins"
             android:icon="@drawable/ic_menu_extension"
             android:title="Plugins" />
+        <item
+            android:id="@+id/nav_themes"
+            android:icon="@drawable/ic_menu_color_lens"
+            android:title="Themes" />
     </group>
 
-    <group android:checkableBehavior="single" android:id="@+id/nav_group_setup">
+    <group android:id="@+id/nav_group_setup">
         <item
             android:id="@+id/nav_install"
             android:icon="@drawable/ic_menu_settings"
             android:title="Install/Update" />
     </group>
 
-    <group android:checkableBehavior="single" android:id="@+id/nav_group_communicate">
+    <group android:id="@+id/nav_group_communicate">
         <item
             android:id="@+id/nav_share"
             android:icon="@drawable/ic_menu_share"
